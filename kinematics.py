@@ -133,30 +133,46 @@ class PlanarArms:
             return np.degrees((theta1, theta2))
 
     @staticmethod
-    def sin_space(start: np.ndarray, stop: np.ndarray, num: int):
+    def __cos_space(start: np.ndarray, stop: np.ndarray, num: int):
         """
-        For the calculation of gradients and trajectories.
+        For the calculation of gradients and trajectories. Derivation of this function is sin(x),
+        so that the maximal change in the middle of the trajectory.
         """
         if not start.size == stop.size:
             raise ValueError('Start and stop vector must have the same dimensions.')
 
+        # calc changes
         offset = stop - start
-        x_lim = np.repeat(np.pi/2, repeats=start.size)
-        x = np.sin(np.linspace(0, x_lim, num, endpoint=True))
+
+        # function to modulate the movement.
+        x_lim = np.repeat(np.pi, repeats=start.size)
+        x = - np.cos(np.linspace(0, x_lim, num, endpoint=True)) + 1.0
+        x /= np.amax(x)
 
         # linear space
         y = np.linspace(0, offset, num, endpoint=True)
 
         return start + x * y
 
-    def reset(self):
+    def reset_all(self):
         """Reset position to default and delete trajectories"""
-
         self.__init__(
             init_angles_left=np.array(self.trajectory_thetas_left[0]),
             init_angles_right=np.array(self.trajectory_thetas_right[0]),
             radians=True
         )
+
+    def set_arm_to_angle(self, arm: str, thetas: np.ndarray, radians: bool = False):
+        """
+        Set the joint angle of one arm to a new joint angle without movement.
+        """
+        thetas = self.check_values(angles=thetas, radians=radians)
+        if arm == 'right':
+            self.angles_right = thetas
+        elif arm == 'left':
+            self.angles_left = thetas
+        else:
+            raise ValueError
 
     def change_angle(self, arm: str, new_thetas: np.ndarray, num_iterations: int = 100, radians: bool = False):
         """
@@ -165,7 +181,7 @@ class PlanarArms:
         new_thetas = self.check_values(new_thetas, radians=radians)
         if arm == 'right':
 
-            trajectory = self.sin_space(start=self.angles_right, stop=new_thetas, num=num_iterations)
+            trajectory = self.__cos_space(start=self.angles_right, stop=new_thetas, num=num_iterations)
 
             for delta_theta in trajectory:
                 self.trajectory_thetas_right.append(delta_theta)
@@ -184,7 +200,7 @@ class PlanarArms:
 
         elif arm == 'left':
 
-            trajectory = self.sin_space(start=self.angles_left, stop=new_thetas, num=num_iterations)[:, -1]
+            trajectory = self.__cos_space(start=self.angles_left, stop=new_thetas, num=num_iterations)[:, -1]
 
             for delta_theta in trajectory:
                 self.trajectory_thetas_left.append(delta_theta)
@@ -305,6 +321,8 @@ class PlanarArms:
             df.to_csv(save_name + '.csv')
 
 class VisPlanarArms(PlanarArms):
+    x_limits = (-450, 450)
+    y_limits = (-50, 400)
     def __init__(self,
                  init_angles_left: np.ndarray,
                  init_angles_right: np.ndarray,
@@ -334,6 +352,9 @@ class VisPlanarArms(PlanarArms):
 
         ax.set_xlabel('x in [mm]')
         ax.set_ylabel('y in [mm]')
+
+        ax.set_xlim(VisPlanarArms.x_limits)
+        ax.set_ylim(VisPlanarArms.y_limits)
 
         # save
         if plot_name is not None:
@@ -368,8 +389,8 @@ class VisPlanarArms(PlanarArms):
         ax.set_xlabel('x in [mm]')
         ax.set_ylabel('y in [mm]')
 
-        ax.set_xlim([-400, 400])
-        ax.set_ylim([-50, 400])
+        ax.set_xlim(VisPlanarArms.x_limits)
+        ax.set_ylim(VisPlanarArms.y_limits)
 
         l, = ax.plot(coordinates_left[init_t][0, :], coordinates_left[init_t][1, :], 'b')
         r, = ax.plot(coordinates_right[init_t][0, :], coordinates_right[init_t][1, :], 'b')
@@ -392,15 +413,3 @@ class VisPlanarArms(PlanarArms):
         time_slider.on_changed(update)
 
         plt.show()
-
-
-my_arms = VisPlanarArms(init_angles_left=np.array((20, 20)),
-                     init_angles_right=np.array((0, 0)))
-
-
-#my_arms.move_to_position(arm='left', end_effector=np.array((-72, 200)))
-my_arms.change_angle(arm='right', new_thetas=np.array((90, 90)), radians=False)
-my_arms.wait(time_steps=50)
-my_arms.change_angle(arm='right', new_thetas=np.array((20, 120)), radians=False)
-my_arms.save_all("right")
-my_arms.plot_trajectory()
