@@ -1,9 +1,9 @@
 import os
+import random
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-
 
 class PlanarArms:
     # joint limits
@@ -184,11 +184,11 @@ class PlanarArms:
             trajectory = self.__cos_space(start=self.angles_right, stop=new_thetas, num=num_iterations)
 
             for delta_theta in trajectory:
+                self.trajectory_gradient_right.append(delta_theta - self.trajectory_thetas_right[-1])
+                self.trajectory_gradient_left.append(np.array((0, 0)))
+
                 self.trajectory_thetas_right.append(delta_theta)
                 self.trajectory_thetas_left.append(self.angles_left)
-
-                self.trajectory_gradient_right.append(delta_theta - self.trajectory_gradient_right[-1])
-                self.trajectory_gradient_left.append(np.array((0, 0)))
 
                 self.end_effector_right.append(PlanarArms.forward_kinematics(arm='right',
                                                                              thetas=delta_theta,
@@ -203,11 +203,11 @@ class PlanarArms:
             trajectory = self.__cos_space(start=self.angles_left, stop=new_thetas, num=num_iterations)[:, -1]
 
             for delta_theta in trajectory:
+                self.trajectory_gradient_left.append(delta_theta - self.trajectory_thetas_left[-1])
+                self.trajectory_gradient_right.append(np.array((0, 0)))
+
                 self.trajectory_thetas_left.append(delta_theta)
                 self.trajectory_thetas_right.append(self.angles_right)
-
-                self.trajectory_gradient_left.append(delta_theta - self.trajectory_gradient_left[-1])
-                self.trajectory_gradient_right.append(np.array((0, 0)))
 
                 self.end_effector_left.append(PlanarArms.forward_kinematics(arm='left',
                                                                             thetas=delta_theta,
@@ -287,42 +287,67 @@ class PlanarArms:
             self.trajectory_gradient_right.append(np.array((0, 0)))
             self.trajectory_gradient_left.append(np.array((0, 0)))
 
-    def save_all(self, arm: str, data_name: str = None):
+    def training_trial(self, arm: str, position: np.ndarray, t_min: int, t_max: int, t_wait: int = 10):
+        assert position.size == 2, "End effector should be 2-dimensional"
+
+        start_angles = PlanarArms.random_theta(return_radians=True)
+        time_interval = int(random.uniform(t_min, t_max))
+
+        self.set_arm_to_angle(thetas=start_angles, arm=arm)
+        self.move_to_position(arm=arm, end_effector=position, num_iterations=time_interval)
+        self.wait(t_wait)
+        self.reset_all()
+
+    def save_state(self, data_name: str = None):
         import datetime
 
-        if arm == "left":
-            d = {
-                'trajectory': self.trajectory_thetas_left,
-                'gradients': self.trajectory_gradient_left,
-                'end_effectors': self.end_effector_left
-            }
-        elif arm == "right":
-            d = {
-                'trajectory': self.trajectory_thetas_right,
-                'gradients': self.trajectory_gradient_right,
-                'end_effectors_': self.end_effector_right
-            }
-        else:
-            raise AssertionError
+        d = {
+            'trajectory_left': self.trajectory_thetas_left,
+            'gradients_left': self.trajectory_gradient_left,
+            'end_effectors_left': self.end_effector_left,
+
+            'trajectory_right': self.trajectory_thetas_right,
+            'gradients_right': self.trajectory_gradient_right,
+            'end_effectors_right': self.end_effector_right
+        }
+
+        df = pd.DataFrame(d)
 
         if data_name is not None:
             folder, _ = os.path.split(data_name)
             if folder and not os.path.exists(folder):
                 os.makedirs(folder)
-
-            df = pd.DataFrame.from_dict(d, orient='index')
-            df.to_csv(data_name + '.csv')
-
         else:
             # get current date
             current_date = datetime.date.today()
-            save_name = f"PlanarArm_{arm}_" + current_date.strftime('%Y%m%d')
-            df = pd.DataFrame.from_dict(d, orient='index')
-            df.to_csv(save_name + '.csv')
+            data_name = "PlanarArm_" + current_date.strftime('%Y%m%d')
+
+        df.to_csv(data_name + '.csv', index=False)
+
+    def import_state(self, file: str):
+        df = pd.read_csv(file, sep=',')
+
+        # convert type back to np.ndarray because pandas imports them as strings...
+        regex_magic = lambda x: np.fromstring(x.replace('[', '').replace(']', ''), sep=' ', dtype=float)
+        for column in df.columns:
+            df[column] = df[column].apply(regex_magic)
+
+        # set states
+        self.trajectory_thetas_left = df['trajectory_left'].tolist()
+        self.trajectory_thetas_right = df['trajectory_right'].tolist()
+
+        self.trajectory_gradient_left = df['gradients_left'].tolist()
+        self.trajectory_gradient_right = df['gradients_right'].tolist()
+
+        self.end_effector_left = df['end_effectors_left'].tolist()
+        self.end_effector_right = df['end_effectors_right'].tolist()
+
 
 class VisPlanarArms(PlanarArms):
+
     x_limits = (-450, 450)
     y_limits = (-50, 400)
+
     def __init__(self,
                  init_angles_left: np.ndarray,
                  init_angles_right: np.ndarray,
