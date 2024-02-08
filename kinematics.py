@@ -8,7 +8,7 @@ import pandas as pd
 
 class PlanarArms:
     # joint limits
-    l_upper_arm_limit, u_upper_arm_limit = np.radians((-30, 160))  # in degrees [°]
+    l_upper_arm_limit, u_upper_arm_limit = np.radians((-20, 160))  # in degrees [°]
     l_forearm_limit, u_forearm_limit = np.radians((0, 180))  # in degrees [°]
 
     # DH parameter
@@ -39,6 +39,7 @@ class PlanarArms:
                                                                  thetas=self.angles_right,
                                                                  radians=True)[:, -1]]
 
+
     @staticmethod
     def check_values(angles: np.ndarray, radians: bool):
         assert angles.size == 2, "Arm must contain two angles: angle shoulder, angle elbow"
@@ -52,6 +53,41 @@ class PlanarArms:
             raise AssertionError('Check joint limits for forearm')
 
         return angles
+
+    @staticmethod
+    def __circular_wrap(x: float, x_min: int | float, x_max: int | float):
+        # Calculate the range of the interval
+        interval_range = x_max - x_min
+
+        # Calculate the wrapped value of x
+        wrapped_x = x_min + ((x - x_min) % interval_range)
+
+        return wrapped_x
+
+    @staticmethod
+    def circ_values(thetas: np.ndarray, radians: bool = True):
+        """
+        This wrapper function is intended to prevent phase jumps in the inverse kinematics due to large errors in the
+        gradient calculation. This means that joint angles are only possible within the given limits.
+
+        :param thetas:
+        :param radians:
+        :return:
+        """
+        if not radians:
+            theta1, theta2 = np.radians(thetas)
+        else:
+            theta1, theta2 = thetas
+
+        theta1 = PlanarArms.__circular_wrap(x=theta1,
+                                            x_min=PlanarArms.l_upper_arm_limit,
+                                            x_max=PlanarArms.u_upper_arm_limit)
+
+        theta2 = PlanarArms.__circular_wrap(x=theta2,
+                                            x_min=PlanarArms.l_forearm_limit,
+                                            x_max=PlanarArms.u_forearm_limit)
+
+        return np.array((theta1, theta2))
 
     @staticmethod
     def forward_kinematics(arm: str, thetas: np.ndarray, radians: bool = False):
@@ -88,8 +124,8 @@ class PlanarArms:
     def inverse_kinematics(arm: str,
                            end_effector: np.ndarray,
                            starting_angles: np.ndarray,
-                           learning_rate: float = 0.05,
-                           max_iterations: int = 2000,
+                           learning_rate: float = 0.01,
+                           max_iterations: int = 5000,
                            abort_criteria: float = 1,  # in [mm]
                            radians: bool = False):
 
@@ -99,13 +135,14 @@ class PlanarArms:
             starting_angles = np.radians(starting_angles)
 
         thetas = starting_angles.copy()
-
         for i in range(max_iterations):
             # Compute the forward kinematics for the current joint angles
-            current_position = PlanarArms.forward_kinematics(arm=arm, thetas=thetas, radians=True)
+            current_position = PlanarArms.forward_kinematics(arm=arm,
+                                                             thetas=thetas,
+                                                             radians=True)[:, -1]
 
             # Calculate the error between the current end effector position and the desired end point
-            error = end_effector - current_position[:, -1]
+            error = end_effector - current_position
 
             # abort when error is smaller than the breaking condition
             if np.linalg.norm(error) < abort_criteria:
@@ -113,10 +150,14 @@ class PlanarArms:
 
             # Calculate the Jacobian matrix for the current joint angles
             J = create_jacobian(thetas=thetas, arm=arm,
-                                a_sh=PlanarArms.upper_arm_length, a_el=PlanarArms.forearm_length, radians=True)
+                                a_sh=PlanarArms.upper_arm_length,
+                                a_el=PlanarArms.forearm_length,
+                                radians=True)
 
             delta_thetas = learning_rate * np.linalg.inv(J) @ error
             thetas += delta_thetas
+            # prevent phase jumps due to large errors
+            thetas = PlanarArms.circ_values(thetas, radians=True)
 
         return thetas
 
@@ -319,6 +360,7 @@ class PlanarArms:
         self.wait(t_wait)
         if trajectory_save_name is not None:
             self.save_state(trajectory_save_name)
+        print('\n')
 
     def save_state(self, data_name: str = None):
         import datetime
@@ -417,6 +459,12 @@ class VisPlanarArms(PlanarArms):
         plt.show()
 
     def plot_trajectory(self, fig_size=(12, 8)):
+        """
+        Visualizes the movements performed so far. Use the slider to set the time
+
+        :param fig_size:
+        :return: None
+        """
         from matplotlib.widgets import Slider
 
         init_t = 0
