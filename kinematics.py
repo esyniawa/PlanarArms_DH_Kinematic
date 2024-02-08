@@ -463,14 +463,3 @@ class VisPlanarArms(PlanarArms):
         time_slider.on_changed(update)
 
         plt.show()
-
-
-my_arms = VisPlanarArms(init_angles_right=np.array((50, 50)), init_angles_left=np.array((50, 50)))
-end_effector = VisPlanarArms.forward_kinematics(arm='right', thetas=np.array((50, 50)), radians=False)[:, -1]
-
-my_arms.training_trial(arm='right', position=end_effector, t_min=5, t_max=50, min_distance=50, trajectory_save_name='bla1')
-my_arms.import_state('bla1.csv')
-
-my_arms.plot_trajectory()
-my_arms.reset_all()
-print(my_arms.trajectory_thetas_right, my_arms.angles_right)
