@@ -360,7 +360,6 @@ class PlanarArms:
         self.wait(t_wait)
         if trajectory_save_name is not None:
             self.save_state(trajectory_save_name)
-        print('\n')
 
     def save_state(self, data_name: str = None):
         import datetime
