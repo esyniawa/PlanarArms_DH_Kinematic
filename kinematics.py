@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
+
 class PlanarArms:
     # joint limits
     l_upper_arm_limit, u_upper_arm_limit = np.radians((-30, 160))  # in degrees [°]
@@ -45,9 +46,9 @@ class PlanarArms:
         if not radians:
             angles = np.radians(angles)
 
-        if angles[0] < PlanarArms.l_upper_arm_limit or angles[0] > PlanarArms.u_upper_arm_limit:
+        if angles[0] <= PlanarArms.l_upper_arm_limit or angles[0] >= PlanarArms.u_upper_arm_limit:
             raise AssertionError('Check joint limits for upper arm')
-        elif angles[1] < PlanarArms.l_forearm_limit or angles[1] > PlanarArms.u_forearm_limit:
+        elif angles[1] <= PlanarArms.l_forearm_limit or angles[1] >= PlanarArms.u_forearm_limit:
             raise AssertionError('Check joint limits for forearm')
 
         return angles
@@ -156,23 +157,26 @@ class PlanarArms:
 
     def reset_all(self):
         """Reset position to default and delete trajectories"""
-        self.__init__(
-            init_angles_left=np.array(self.trajectory_thetas_left[0]),
-            init_angles_right=np.array(self.trajectory_thetas_right[0]),
-            radians=True
-        )
+        self.__init__(init_angles_left=self.trajectory_thetas_left[0],
+                      init_angles_right=self.trajectory_thetas_right[0],
+                      radians=True)
 
-    def set_arm_to_angle(self, arm: str, thetas: np.ndarray, radians: bool = False):
+    def reset_arm_to_angle(self, arm: str, thetas: np.ndarray, radians: bool = True):
         """
-        Set the joint angle of one arm to a new joint angle without movement.
+        Set the joint angle of one arm to a new joint angle without movement. Thetas = must be in degrees
         """
-        thetas = self.check_values(angles=thetas, radians=radians)
+        thetas = PlanarArms.check_values(thetas, radians=radians)
         if arm == 'right':
-            self.angles_right = thetas
+            self.__init__(init_angles_right=thetas,
+                          init_angles_left=self.trajectory_thetas_left[-1],
+                          radians=True)
+
         elif arm == 'left':
-            self.angles_left = thetas
+            self.__init__(init_angles_left=thetas,
+                          init_angles_right=self.trajectory_thetas_right[-1],
+                          radians=True)
         else:
-            raise ValueError
+            raise ValueError('Please specify if the arm is right or left!')
 
     def change_angle(self, arm: str, new_thetas: np.ndarray, num_iterations: int = 100, radians: bool = False):
         """
@@ -287,16 +291,34 @@ class PlanarArms:
             self.trajectory_gradient_right.append(np.array((0, 0)))
             self.trajectory_gradient_left.append(np.array((0, 0)))
 
-    def training_trial(self, arm: str, position: np.ndarray, t_min: int, t_max: int, t_wait: int = 10):
+            self.end_effector_right.append(self.end_effector_right[-1])
+            self.end_effector_left.append(self.end_effector_left[-1])
+
+    def training_trial(self,
+                       arm: str,
+                       position: np.ndarray,
+                       t_min: int, t_max: int, t_wait: int = 10,
+                       min_distance: float = 50.0,
+                       trajectory_save_name: str = None):
+
         assert position.size == 2, "End effector should be 2-dimensional"
 
-        start_angles = PlanarArms.random_theta(return_radians=True)
+        distance = -1
+        while distance <= min_distance:
+            start_angles = PlanarArms.random_theta(return_radians=True)
+            start_coordinate = PlanarArms.forward_kinematics(arm=arm,
+                                                             thetas=start_angles,
+                                                             radians=True)[:, -1]
+
+            distance = np.linalg.norm(position - start_coordinate)
+
         time_interval = int(random.uniform(t_min, t_max))
 
-        self.set_arm_to_angle(thetas=start_angles, arm=arm)
+        self.reset_arm_to_angle(arm=arm, thetas=start_angles, radians=True)
         self.move_to_position(arm=arm, end_effector=position, num_iterations=time_interval)
         self.wait(t_wait)
-        self.reset_all()
+        if trajectory_save_name is not None:
+            self.save_state(trajectory_save_name)
 
     def save_state(self, data_name: str = None):
         import datetime
@@ -333,6 +355,9 @@ class PlanarArms:
             df[column] = df[column].apply(regex_magic)
 
         # set states
+        self.angles_left = df['trajectory_left'].tolist()[-1]
+        self.angles_right = df['trajectory_right'].tolist()[-1]
+
         self.trajectory_thetas_left = df['trajectory_left'].tolist()
         self.trajectory_thetas_right = df['trajectory_right'].tolist()
 
@@ -438,3 +463,14 @@ class VisPlanarArms(PlanarArms):
         time_slider.on_changed(update)
 
         plt.show()
+
+
+my_arms = VisPlanarArms(init_angles_right=np.array((50, 50)), init_angles_left=np.array((50, 50)))
+end_effector = VisPlanarArms.forward_kinematics(arm='right', thetas=np.array((50, 50)), radians=False)[:, -1]
+
+my_arms.training_trial(arm='right', position=end_effector, t_min=5, t_max=50, min_distance=50, trajectory_save_name='bla1')
+my_arms.import_state('bla1.csv')
+
+my_arms.plot_trajectory()
+my_arms.reset_all()
+print(my_arms.trajectory_thetas_right, my_arms.angles_right)
