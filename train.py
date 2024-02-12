@@ -47,6 +47,8 @@ error_history = []
 
 def train_forward_model(sim_id: int, trial: int):
     global alpha, R_mean
+
+    id_init = trial % num_init_thetas
     # Reinitialize network
     res_population.x = ann.Uniform(-0.1, 0.1).get_values(N)
     res_population.r = np.tanh(res_population.x)
@@ -57,7 +59,7 @@ def train_forward_model(sim_id: int, trial: int):
     # create input
     save_name = f"trajectories/sim_{sim_id}/run_{trial}"
     my_arms.training_fixed_position(arm=train_arm,
-                                    init_angles=init_thetas[trial % num_init_thetas],
+                                    init_angles=init_thetas[id_init],
                                     radians=False,
                                     position=learn_end_effector,
                                     t_min=10, t_max=60,
@@ -90,9 +92,9 @@ def train_forward_model(sim_id: int, trial: int):
 
     # Compute the target
     if train_arm == 'right':
-        target = np.array(my_arms.end_effector_right) / 1000.0  # in [m]
+        target = np.array(my_arms.end_effector_right) / 100.0  # in [dm]
     else:
-        target = np.array(my_arms.end_effector_left) / 1000.0  # in [m]
+        target = np.array(my_arms.end_effector_left) / 100.0  # in [dm]
 
     # Response is over the last 200 ms
     output_r = rec['r'][-int(t_execution):]  # neuron 100 over the last 200 ms
@@ -105,7 +107,7 @@ def train_forward_model(sim_id: int, trial: int):
         # Apply the learning rule
         w_recurrent.learning_phase = 1.0
         w_recurrent.error = error
-        w_recurrent.mean_error = R_mean[trial % num_init_thetas]
+        w_recurrent.mean_error = R_mean[id_init]
 
         # Learn for one step
         ann.step()
@@ -116,7 +118,7 @@ def train_forward_model(sim_id: int, trial: int):
         _ = m.get()  # to flush the recording of the last step
 
     # Update mean reward
-    R_mean[trial % num_init_thetas] = alpha * R_mean + (1. - alpha) * error
+    R_mean[id_init] = alpha * R_mean[id_init] + (1. - alpha) * error
 
     return error
 
@@ -126,8 +128,11 @@ for trial in range(training_trials):
     error_history.append(train_forward_model(sim_id, trial))
 
 # error history
-np.save("error_hist.npy", error_history)
+results_folder = f"results/sim_{sim_id}/"
+if not os.path.exists(results_folder):
+    os.makedirs(results_folder)
+
+np.save(results_folder + "error_hist.npy", error_history)
 # weights
-weight_folder = f"networks/sim_{sim_id}/"
 w_res.extract_weights()
-w_res.save_cons(weight_folder)
+w_res.save_cons(results_folder)
