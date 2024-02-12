@@ -361,6 +361,24 @@ class PlanarArms:
         if trajectory_save_name is not None:
             self.save_state(trajectory_save_name)
 
+    def training_fixed_position(self,
+                                arm: str,
+                                init_angles: np.ndarray,
+                                radians: bool,
+                                position: np.ndarray,
+                                t_min: int, t_max: int, t_wait: int = 10,
+                                trajectory_save_name: str = None):
+
+        assert position.size == 2, "End effector should be 2-dimensional"
+
+        time_interval = int(random.uniform(t_min, t_max))
+
+        self.reset_arm_to_angle(arm=arm, thetas=init_angles, radians=radians)
+        self.move_to_position(arm=arm, end_effector=position, num_iterations=time_interval)
+        self.wait(t_wait)
+        if trajectory_save_name is not None:
+            self.save_state(trajectory_save_name)
+
     def save_state(self, data_name: str = None):
         import datetime
 

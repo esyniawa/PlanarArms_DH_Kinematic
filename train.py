@@ -1,32 +1,46 @@
+import os
+
 import numpy as np
+import sys
 
 from kinematics import VisPlanarArms
 from reservoir import *
+from monitoring import Con_Monitor
 
-sim_id = 0
-training_trials = 1000
+sim_id = int(sys.argv[1])
+training_trials = 2000
 
 # parameters for training
 train_arm = 'right'
 learn_theta = np.array((60, 90))
-init_theta = np.array((40, 40))
+init_thetas = (np.array((40, 40)),
+               np.array((90, 50)))
+num_init_thetas = len(init_thetas)
+
 # presentation times
-schedule = 50.  # in [ms]
+schedule = 20.  # in [ms]
 t_execution = 20. * schedule
 t_relax = 50.
 
 # compile reservoir
-ann.compile()
+compile_folder = f"networks/sim_{sim_id}/"
+if not os.path.exists(compile_folder):
+    os.makedirs(compile_folder)
+ann.compile(directory=compile_folder)
 
 # init monitors
 m = ann.Monitor(output_pop, ['r'])
 
+# init weights
+w_res = Con_Monitor([w_recurrent])
+w_res.extract_weights()
+
 # initialize kinematics
 learn_end_effector = VisPlanarArms.forward_kinematics(arm=train_arm, thetas=learn_theta, radians=False)[:, -1]
-my_arms = VisPlanarArms(init_angles_left=init_theta, init_angles_right=init_theta, radians=False)
+my_arms = VisPlanarArms(init_angles_left=init_thetas[0], init_angles_right=init_thetas[0], radians=False)
 
 # init parameters
-R_mean = 0
+R_mean = np.zeros(num_init_thetas)
 alpha = 0.75  # 0.33
 error_history = []
 
@@ -42,10 +56,12 @@ def train_forward_model(sim_id: int, trial: int):
 
     # create input
     save_name = f"trajectories/sim_{sim_id}/run_{trial}"
-    my_arms.training_trial(arm=train_arm,
-                           position=learn_end_effector,
-                           t_min=20, t_max=250,
-                           trajectory_save_name=save_name)
+    my_arms.training_fixed_position(arm=train_arm,
+                                    init_angles=init_thetas[trial % num_init_thetas],
+                                    radians=False,
+                                    position=learn_end_effector,
+                                    t_min=10, t_max=60,
+                                    trajectory_save_name=save_name)
 
     t_trajectory = float(len(my_arms.trajectory_thetas_right))
 
@@ -61,7 +77,6 @@ def train_forward_model(sim_id: int, trial: int):
         inp_theta.r = my_arms.trajectory_thetas_right[n]
         inp_gradient.r = my_arms.trajectory_gradient_right[n]
 
-    print(t_trajectory * schedule)
     ann.simulate(t_trajectory * schedule)
 
     # Relaxation
@@ -90,7 +105,7 @@ def train_forward_model(sim_id: int, trial: int):
         # Apply the learning rule
         w_recurrent.learning_phase = 1.0
         w_recurrent.error = error
-        w_recurrent.mean_error = R_mean
+        w_recurrent.mean_error = R_mean[trial % num_init_thetas]
 
         # Learn for one step
         ann.step()
@@ -101,12 +116,18 @@ def train_forward_model(sim_id: int, trial: int):
         _ = m.get()  # to flush the recording of the last step
 
     # Update mean reward
-    R_mean = alpha * R_mean + (1. - alpha) * error
+    R_mean[trial % num_init_thetas] = alpha * R_mean + (1. - alpha) * error
 
     return error
 
 
+# execute training
 for trial in range(training_trials):
     error_history.append(train_forward_model(sim_id, trial))
 
+# error history
 np.save("error_hist.npy", error_history)
+# weights
+weight_folder = f"networks/sim_{sim_id}/"
+w_res.extract_weights()
+w_res.save_cons(weight_folder)

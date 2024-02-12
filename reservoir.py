@@ -37,7 +37,7 @@ miconi_neuron = ann.Neuron(
 
 res_synapse = ann.Synapse(
     parameters="""
-        eta = 0.5 : projection # Learning rate
+        eta = 0.2 : projection # Learning rate
         learning_phase = 0.0 : projection # Flag to allow learning only at the end of a trial
         error = 0.0 : projection # Reward received
         mean_error = 0.0 : projection # Mean Reward received
