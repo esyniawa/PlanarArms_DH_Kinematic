@@ -2,12 +2,36 @@ import numpy as np
 import ANNarchy as ann
 ann.clear()
 # fixed seed to control network init
-ann.setup(dt=1.0, seed=2, num_threads=4)
+ann.setup(dt=1.0, num_threads=4)
 
 # size reservoir
 N = 400
+dim_output = 20  # number of output neurons
 
-input_neuron = ann.Neuron(parameters="r=0.0")
+BaselineNeuron = ann.Neuron(
+    parameters="""
+        baseline = 0.0
+        noise = 0.0 : population
+    """,
+    equations="""
+        r = baseline + noise * Uniform(-1.0,1.0): min=0.0
+    """
+)
+
+BaselineNeuron_dynamic = ann.Neuron(
+    parameters="""
+        tau_up = 1.0 : population
+        tau_down = 20.0 : population
+        baseline = 0.0 : population
+        noise = 0.0 : population
+    """,
+    equations="""
+        base = baseline + noise * Uniform(-1.0,1.0): min=0.0
+        dr/dt = if (baseline>0.01): (base-r)/tau_up else: -r/tau_down : min=0.0
+    """,
+    name = "Baseline Neuron",
+    description = "Time dynamic Neuron with baseline to be set. "
+)
 
 miconi_neuron = ann.Neuron(
     parameters="""
@@ -15,7 +39,7 @@ miconi_neuron = ann.Neuron(
         constant = 0.0 # The four first neurons have constant rates
         alpha = 0.05 : population # To compute the sliding mean
         f = 3.0 : population # Frequency of the perturbation
-        A = 16. : population # Perturbation amplitude. dt*A/tau should be 0.5...
+        A = 15. : population # Perturbation amplitude. dt*A/tau should be 0.5...
     """,
     equations="""
         # Perturbation
@@ -37,7 +61,7 @@ miconi_neuron = ann.Neuron(
 
 res_synapse = ann.Synapse(
     parameters="""
-        eta = 0.2 : projection # Learning rate
+        eta = 0.8 : projection # Learning rate
         learning_phase = 0.0 : projection # Flag to allow learning only at the end of a trial
         error = 0.0 : projection # Reward received
         mean_error = 0.0 : projection # Mean Reward received
@@ -63,9 +87,9 @@ res_synapse = ann.Synapse(
 )
 
 # Input population
-inp_theta = ann.Population(geometry=2, neuron=input_neuron, name="input_theta")
-inp_gradient = ann.Population(geometry=2, neuron=input_neuron, name="input_gradients")
-inp_arm = ann.Population(geometry=2, neuron=input_neuron, name="input_arm")
+inp_theta = ann.Population(geometry=2, neuron=BaselineNeuron, name="input_theta")
+inp_gradient = ann.Population(geometry=2, neuron=BaselineNeuron, name="input_gradients")
+inp_arm = ann.Population(geometry=2, neuron=BaselineNeuron, name="input_arm")
 
 input_pops = (inp_theta, inp_gradient, inp_arm)
 
@@ -74,19 +98,21 @@ res_population = ann.Population(geometry=N, neuron=miconi_neuron, name="reservoi
 res_population[0].constant = 1.0
 res_population[1].constant = 1.0
 res_population[2].constant = -1.0
-res_population.x = ann.Uniform(-0.1, 0.1)
+res_population.x = ann.Uniform(-0.2, 0.2)
 
 # projections
 # input weights
 w_input = {}
 for input_pop in input_pops:
-    w_input[input_pop.name] = ann.Projection(pre=input_pop, post=res_population, target='exc')
+    w_input[input_pop.name] = ann.Projection(pre=input_pop, post=res_population,
+                                             target='exc',
+                                             name=input_pop.name)
     w_input[input_pop.name].connect_all_to_all(weights=ann.Uniform(-1.0, 1.0))
 
 # Recurrent weights
 g = 1.5
-w_recurrent = ann.Projection(res_population, res_population, 'exc', res_synapse)
+w_recurrent = ann.Projection(res_population, res_population, 'exc', res_synapse, name='lat_res')
 w_recurrent.connect_all_to_all(weights=ann.Normal(0., g/np.sqrt(N)), allow_self_connections=True)
 
 # output populations
-output_pop = res_population[-2:]
+output_pop = res_population[-(dim_output + 1):-1]

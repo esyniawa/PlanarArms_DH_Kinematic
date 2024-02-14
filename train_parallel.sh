@@ -3,8 +3,6 @@ startTime=$(date +%s)
 let parallel=$1
 let durchgaenge=$2
 
-let goals=$3
-
 # start paradigma
 for durchgang in $(seq $durchgaenge); do
 	startdurchgangTime=$(date +%s)

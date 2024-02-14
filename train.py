@@ -3,12 +3,15 @@ import os
 import numpy as np
 import sys
 
+sim_id = int(sys.argv[1])
+# fix seed for testing
+np.random.seed()
+
 from kinematics import VisPlanarArms
 from reservoir import *
-from monitoring import Con_Monitor
+from monitoring import Con_Monitor, Pop_Monitor
 
-sim_id = int(sys.argv[1])
-training_trials = 2000
+training_trials = 1000
 
 # parameters for training
 train_arm = 'right'
@@ -19,8 +22,8 @@ num_init_thetas = len(init_thetas)
 
 # presentation times
 schedule = 20.  # in [ms]
-t_execution = 20. * schedule
-t_relax = 50.
+t_output = 50.  # in [ms]
+t_relax = 20.  # in [ms]
 
 # compile reservoir
 compile_folder = f"networks/sim_{sim_id}/"
@@ -30,10 +33,14 @@ ann.compile(directory=compile_folder)
 
 # init monitors
 m = ann.Monitor(output_pop, ['r'])
+m_pops = Pop_Monitor(list(input_pops) + [res_population], sampling_rate=5)
+m_pops.start()
 
 # init weights
 w_res = Con_Monitor([w_recurrent])
 w_res.extract_weights()
+w_in = Con_Monitor([w_input[pop.name] for pop in input_pops])
+w_in.extract_weights()
 
 # initialize kinematics
 learn_end_effector = VisPlanarArms.forward_kinematics(arm=train_arm, thetas=learn_theta, radians=False)[:, -1]
@@ -69,15 +76,15 @@ def train_forward_model(sim_id: int, trial: int):
 
     # input modality
     if train_arm == 'right':
-        inp_arm.r = np.array((1., 0.))
+        inp_arm.baseline = np.array((1., 0.))
     else:
-        inp_arm.r = np.array((0., 1.))
+        inp_arm.baseline = np.array((0., 1.))
 
     @ann.every(period=schedule)
     def set_inputs(n):
         # Set inputs to the network
-        inp_theta.r = my_arms.trajectory_thetas_right[n]
-        inp_gradient.r = my_arms.trajectory_gradient_right[n]
+        inp_theta.baseline = my_arms.trajectory_thetas_right[n]
+        inp_gradient.baseline = my_arms.trajectory_gradient_right[n]
 
     ann.simulate(t_trajectory * schedule)
 
@@ -85,25 +92,29 @@ def train_forward_model(sim_id: int, trial: int):
     for inp in input_pop:
         inp.r = 0.0
 
-    ann.simulate(50)
+    ann.simulate(t_relax)
 
     # Read the output
     rec = m.get()
 
-    # Compute the target
+    # Compute the target (last end effector)
     if train_arm == 'right':
-        target = np.array(my_arms.end_effector_right) / 100.0  # in [dm]
+        target = my_arms.end_effector_right[-1] / 100.0  # in [m]
     else:
-        target = np.array(my_arms.end_effector_left) / 100.0  # in [dm]
+        target = my_arms.end_effector_left[-1] / 100.0  # in [m]
 
-    # Response is over the last 200 ms
-    output_r = rec['r'][-int(t_execution):]  # neuron 100 over the last 200 ms
+    # Response is over the last ms (dim: (t, neuron, space))
+    output_r = rec['r'][-int(t_output):].reshape((int(t_output), int(dim_output/2), 2))
+    # mean over time
+    output_r = np.mean(output_r, axis=0)
+    # mean over neurons
+    output_r = np.mean(output_r, axis=0)
 
     # Compute the error
-    error = np.linalg.norm(target - np.mean(output_r))
+    error = np.linalg.norm(target - output_r)
 
-    # The first 25 trial do not learn, to let R_mean get realistic values
-    if trial > 25:
+    # The first 20 trial do not learn, to let R_mean get realistic values
+    if trial > 20:
         # Apply the learning rule
         w_recurrent.learning_phase = 1.0
         w_recurrent.error = error
@@ -133,6 +144,13 @@ if not os.path.exists(results_folder):
     os.makedirs(results_folder)
 
 np.save(results_folder + "error_hist.npy", error_history)
+np.save(results_folder + "r_mean.npy", R_mean)
+
+# monitors
+m_pops.save(results_folder)
+
 # weights
+w_in.save_cons(results_folder)
+
 w_res.extract_weights()
 w_res.save_cons(results_folder)

@@ -50,3 +50,22 @@ def create_jacobian(thetas,
     J = const * np.array([[J11, J12], [J21, J22]])
 
     return J
+
+
+def load_monitors(simID, data_type):
+    import os
+
+    results_folder = f'results/sim_{simID}/'
+
+    if data_type == 'r' or data_type == 'w':
+
+        monitors = {}
+
+        # get all rates
+        files = [x for x in os.listdir(results_folder) if x.startswith(data_type)]
+        for file in files:
+            monitors[file.rsplit('.', maxsplit=1)[0]] = np.load(results_folder + file)
+
+        return monitors
+    else:
+        raise AttributeError

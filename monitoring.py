@@ -35,12 +35,12 @@ class Pop_Monitor(object):
 
         for monitor in self.monitors:
             rec = monitor.get(self.var)
-            np.save(folder + self.var + monitor.object.name, rec)
+            np.save(folder + self.var + '_' + monitor.object.name, rec)
 
     def load(self, folder):
         monitor_dict = {}
         for monitor in self.monitors:
-            monitor_dict[self.var + monitor.object.name] = np.load(folder + self.var + monitor.object.name + '.npy')
+            monitor_dict[self.var + monitor.object.name] = np.load(folder + self.var + '_' + monitor.object.name + '.npy')
         return monitor_dict
 
 
@@ -61,7 +61,7 @@ class Con_Monitor(object):
             makedirs(folder)
 
         for con in self.connections:
-            np.save(folder + 'w' + con.name, self.weight_monitors[con.name])
+            np.save(folder + 'w_' + con.name, self.weight_monitors[con.name])
 
     def load_cons(self, folder: str):
         con_dict = {}
