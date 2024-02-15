@@ -22,8 +22,8 @@ num_init_thetas = len(init_thetas)
 
 # presentation times
 schedule = 20.  # in [ms]
-t_output = 50.  # in [ms]
-t_relax = 20.  # in [ms]
+t_relax = 200.  # in [ms]
+t_output = t_relax  # in [ms]
 
 # compile reservoir
 compile_folder = f"networks/sim_{sim_id}/"
@@ -69,7 +69,7 @@ def train_forward_model(sim_id: int, trial: int):
                                     init_angles=init_thetas[id_init],
                                     radians=False,
                                     position=learn_end_effector,
-                                    t_min=10, t_max=60,
+                                    t_min=10, t_max=60, t_wait=1,
                                     trajectory_save_name=save_name)
 
     t_trajectory = float(len(my_arms.trajectory_thetas_right))
@@ -99,9 +99,9 @@ def train_forward_model(sim_id: int, trial: int):
 
     # Compute the target (last end effector)
     if train_arm == 'right':
-        target = my_arms.end_effector_right[-1] / 100.0  # in [m]
+        target = my_arms.end_effector_right[-1] / 100.0  # in [dm]
     else:
-        target = my_arms.end_effector_left[-1] / 100.0  # in [m]
+        target = my_arms.end_effector_left[-1] / 100.0  # in [dm]
 
     # Response is over the last ms (dim: (t, neuron, space))
     output_r = rec['r'][-int(t_output):].reshape((int(t_output), int(dim_output/2), 2))
@@ -130,6 +130,9 @@ def train_forward_model(sim_id: int, trial: int):
 
     # Update mean reward
     R_mean[id_init] = alpha * R_mean[id_init] + (1. - alpha) * error
+
+    # reset network
+    ann.reset(monitors=False)
 
     return error
 
