@@ -2,11 +2,11 @@ import numpy as np
 import ANNarchy as ann
 ann.clear()
 # fixed seed to control network init
-ann.setup(dt=1.0, num_threads=4)
+ann.setup(dt=1.0, num_threads=1)
 
 # size reservoir
 N = 400
-dim_output = 20  # number of output neurons
+dim_output = 40  # number of output neurons
 
 BaselineNeuron = ann.Neuron(
     parameters="""
@@ -114,5 +114,5 @@ g = 1.5
 w_recurrent = ann.Projection(res_population, res_population, 'exc', res_synapse, name='lat_res')
 w_recurrent.connect_all_to_all(weights=ann.Normal(0., g/np.sqrt(N)), allow_self_connections=True)
 
-# output populations
-output_pop = res_population[-(dim_output + 1):-1]
+# output populations (don't use negative indeces)
+output_pop = res_population[(N - dim_output - 1):(N - 1)]

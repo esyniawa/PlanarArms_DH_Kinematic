@@ -11,7 +11,7 @@ from kinematics import VisPlanarArms
 from reservoir import *
 from monitoring import Con_Monitor, Pop_Monitor
 
-training_trials = 1000
+training_trials = 2000
 
 # parameters for training
 train_arm = 'right'
@@ -33,8 +33,7 @@ ann.compile(directory=compile_folder)
 
 # init monitors
 m = ann.Monitor(output_pop, ['r'])
-m_pops = Pop_Monitor(list(input_pops) + [res_population], sampling_rate=5)
-m_pops.start()
+m_pops = Pop_Monitor(list(input_pops) + [res_population], sampling_rate=1)
 
 # init weights
 w_res = Con_Monitor([w_recurrent])
@@ -54,6 +53,9 @@ error_history = []
 
 def train_forward_model(sim_id: int, trial: int):
     global alpha, R_mean
+
+    if trial == 50:
+        m_pops.start()
 
     id_init = trial % num_init_thetas
     # Reinitialize network
@@ -90,7 +92,7 @@ def train_forward_model(sim_id: int, trial: int):
 
     # Relaxation
     for inp in input_pop:
-        inp.r = 0.0
+        inp.baseline = 0.0
 
     ann.simulate(t_relax)
 
@@ -99,16 +101,20 @@ def train_forward_model(sim_id: int, trial: int):
 
     # Compute the target (last end effector)
     if train_arm == 'right':
-        target = my_arms.end_effector_right[-1] / 100.0  # in [dm]
+        target = my_arms.end_effector_right[-1] / 10.0  # in [cm]
     else:
-        target = my_arms.end_effector_left[-1] / 100.0  # in [dm]
+        target = my_arms.end_effector_left[-1] / 10.0  # in [cm]
 
     # Response is over the last ms (dim: (t, neuron, space))
-    output_r = rec['r'][-int(t_output):].reshape((int(t_output), int(dim_output/2), 2))
+    output_r = np.array(rec['r'][-int(t_output):, :]).reshape((int(t_output), int(dim_output/2), 2))
+
     # mean over time
     output_r = np.mean(output_r, axis=0)
-    # mean over neurons
-    output_r = np.mean(output_r, axis=0)
+
+    # sum over neurons
+    output_r = np.sum(output_r, axis=0)
+    print(output_r)
+    print(target)
 
     # Compute the error
     error = np.linalg.norm(target - output_r)
@@ -130,6 +136,9 @@ def train_forward_model(sim_id: int, trial: int):
 
     # Update mean reward
     R_mean[id_init] = alpha * R_mean[id_init] + (1. - alpha) * error
+
+    if trial == 55:
+        m_pops.stop()
 
     # reset network
     ann.reset(monitors=False)
