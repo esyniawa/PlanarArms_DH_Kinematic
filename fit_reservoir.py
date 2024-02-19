@@ -189,9 +189,10 @@ if __name__ == '__main__':
     training_arm = 'right'
     end_effector = VisPlanarArms.forward_kinematics(arm=training_arm, thetas=np.array((60, 90)), radians=False)[:, -1]
 
-    res, error, prediction = fit_reservoir(arm=training_arm,
-                                           end_effector=end_effector,
-                                           training_trials=250)
+    with suppress_stdout():
+        res, error, prediction = fit_reservoir(arm=training_arm,
+                                               end_effector=end_effector,
+                                               training_trials=250)
 
     results_folder = f'results/fit_seed_{sim_id}/'
     if not os.path.exists(results_folder):
