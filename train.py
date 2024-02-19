@@ -11,7 +11,7 @@ from kinematics import VisPlanarArms
 from reservoir import *
 from monitoring import Con_Monitor, Pop_Monitor
 
-training_trials = 2000
+training_trials = 5000
 
 # parameters for training
 train_arm = 'right'
@@ -113,8 +113,6 @@ def train_forward_model(sim_id: int, trial: int):
 
     # sum over neurons
     output_r = np.sum(output_r, axis=0)
-    print(output_r)
-    print(target)
 
     # Compute the error
     error = np.linalg.norm(target - output_r)
