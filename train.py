@@ -54,7 +54,7 @@ error_history = []
 def train_forward_model(sim_id: int, trial: int):
     global alpha, R_mean
 
-    if trial == 50:
+    if trial == (training_trials - 10):
         m_pops.start()
 
     id_init = trial % num_init_thetas
@@ -135,7 +135,7 @@ def train_forward_model(sim_id: int, trial: int):
     # Update mean reward
     R_mean[id_init] = alpha * R_mean[id_init] + (1. - alpha) * error
 
-    if trial == 55:
+    if trial == training_trials:
         m_pops.stop()
 
     # reset network

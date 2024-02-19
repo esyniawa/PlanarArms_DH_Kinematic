@@ -52,7 +52,13 @@ def create_jacobian(thetas,
     return J
 
 
-def load_monitors(simID, data_type):
+def moving_average(a: np.ndarray | list | tuple, n: int):
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1 :] / n
+
+
+def load_monitors(simID: int, data_type: str):
     import os
 
     results_folder = f'results/sim_{simID}/'

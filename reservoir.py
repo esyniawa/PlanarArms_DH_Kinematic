@@ -2,7 +2,7 @@ import numpy as np
 import ANNarchy as ann
 ann.clear()
 # fixed seed to control network init
-ann.setup(dt=1.0, num_threads=1)
+ann.setup(dt=1.0, num_threads=4)
 
 # size reservoir
 N = 400
@@ -38,8 +38,8 @@ miconi_neuron = ann.Neuron(
         tau = 30.0 : population # Time constant
         constant = 0.0 # The four first neurons have constant rates
         alpha = 0.05 : population # To compute the sliding mean
-        f = 12. : population # Frequency of the perturbation
-        A = 20. : population # Perturbation amplitude. dt*A/tau should be 0.5...
+        f = 12.  # Frequency of the perturbation
+        A = 20. # Perturbation amplitude. dt*A/tau should be 0.5...
     """,
     equations="""
         # Perturbation

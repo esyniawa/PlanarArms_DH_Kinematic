@@ -528,3 +528,4 @@ class VisPlanarArms(PlanarArms):
         time_slider.on_changed(update)
 
         plt.show()
+
