@@ -47,14 +47,16 @@ my_arms = VisPlanarArms(init_angles_left=init_thetas[0], init_angles_right=init_
 
 # init parameters
 R_mean = np.zeros(num_init_thetas)
-alpha = 0.75  # 0.33
+alpha = 0.33  # 0.33
+
 error_history = []
+prediction_history = []
 
 
 def train_forward_model(sim_id: int, trial: int):
     global alpha, R_mean
 
-    if trial == 50:
+    if trial == (training_trials - 10):
         m_pops.start()
 
     id_init = trial % num_init_thetas
@@ -135,18 +137,20 @@ def train_forward_model(sim_id: int, trial: int):
     # Update mean reward
     R_mean[id_init] = alpha * R_mean[id_init] + (1. - alpha) * error
 
-    if trial == 55:
+    if trial == training_trials:
         m_pops.stop()
 
     # reset network
     ann.reset(monitors=False)
 
-    return error
+    return error, output_r
 
 
 # execute training
 for trial in range(training_trials):
-    error_history.append(train_forward_model(sim_id, trial))
+    my_error, my_prediction = train_forward_model(sim_id, trial)
+    error_history.append(my_error)
+    prediction_history.append(my_prediction)
 
 # error history
 results_folder = f"results/sim_{sim_id}/"
