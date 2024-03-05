@@ -2,7 +2,7 @@ import numpy as np
 import ANNarchy as ann
 ann.clear()
 # fixed seed to control network init
-ann.setup(dt=1.0, num_threads=4)
+ann.setup(dt=1.0, num_threads=6)
 
 # size reservoir
 N = 400

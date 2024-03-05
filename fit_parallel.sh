@@ -8,7 +8,7 @@ for durchgang in $(seq $durchgaenge); do
 	startdurchgangTime=$(date +%s)
         for i in $(seq $parallel); do
                 let y=$i+$parallel*$((durchgang - 1))
-                python train.py $y &
+                python fit_reservoir.py $y &
         done
         wait
         sleep 5
