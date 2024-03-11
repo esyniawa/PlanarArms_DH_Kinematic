@@ -5,8 +5,8 @@ ann.clear()
 ann.setup(dt=1.0, num_threads=6)
 
 # size reservoir
-N = 400
-dim_output = 40  # number of output neurons
+N = 500
+dim_output = 50  # number of output neurons
 
 BaselineNeuron = ann.Neuron(
     parameters="""

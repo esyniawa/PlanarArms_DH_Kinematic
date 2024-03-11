@@ -15,7 +15,11 @@ from contextlib import contextmanager
 
 import matplotlib.pyplot as plt
 
+# define variables
 do_plot = True
+
+error_history: list = []
+prediction: list = []
 
 # supress standard output
 @contextmanager
@@ -27,6 +31,23 @@ def suppress_stdout():
             yield
         finally:
             sys.stdout = old_stdout
+
+
+# For resetting weights
+class Initial_weights(object):
+    def __init__(self, connections):
+        self.connections = connections
+
+    def write_weights(self, folder):
+        for con in self.connections:
+            if not os.path.exists(folder):
+                os.makedirs(folder + 'projections/')
+
+            con.save(folder + 'projections/' + con.name + '.npz')
+
+    def load_weights(self, folder):
+        for con in self.connections:
+            con.load(folder + 'projections/' + con.name + '.npz')
 
 
 # Compute the mean reward per trial
@@ -55,14 +76,15 @@ def fit_reservoir(arm: str,
         os.makedirs(compile_folder)
     ann.compile(directory=compile_folder)
 
+    # init reservoir weights
+    init_w = Initial_weights([w_recurrent, ])
+    init_w.write_weights(compile_folder)
+
     # init monitors
     m = ann.Monitor(output_pop, ['r'])
 
     # initialize kinematics
     my_arms = VisPlanarArms(init_angles_left=init_thetas[0], init_angles_right=init_thetas[0], radians=False)
-
-    error_history = []
-    prediction = []
 
     def loss_function(res_params,
                       weight_mean=1.0,
@@ -74,6 +96,15 @@ def fit_reservoir(arm: str,
         w_recurrent.eta = param_eta
         res_population.A = param_A
         res_population.f = param_f
+
+        # reset weights
+        init_w.load_weights(compile_folder)
+
+        # reset history
+        global error_history, prediction
+        
+        error_history = []
+        prediction = []
 
         # learn with reservoir
         for trial in range(training_trials):
@@ -180,7 +211,7 @@ def fit_reservoir(arm: str,
     optimize_result = bads.optimize()
     fitted_params = optimize_result['x']
 
-    return fitted_params, error_history, prediction
+    return fitted_params
 
 
 # run optimization
@@ -190,24 +221,24 @@ if __name__ == '__main__':
     end_effector = VisPlanarArms.forward_kinematics(arm=training_arm, thetas=np.array((60, 90)), radians=False)[:, -1]
 
     with suppress_stdout():
-        res, error, prediction = fit_reservoir(arm=training_arm,
-                                               end_effector=end_effector,
-                                               training_trials=250)
+        res = fit_reservoir(arm=training_arm,
+                            end_effector=end_effector,
+                            training_trials=250)
 
     results_folder = f'results/fit_seed_{sim_id}/'
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
 
     np.save(results_folder + 'fitted_params.npy', res)
-    np.save(results_folder + 'error_history.npy', error)
+    np.save(results_folder + 'error_history.npy', error_history)
     np.save(results_folder + 'prediction_history.npy', prediction)
 
     if do_plot:
         c = 5
-        mov_error = moving_average(error, c)
-        x = np.arange(c, len(error) + 1)
+        mov_error = moving_average(error_history, c)
+        x = np.arange(c, len(error_history) + 1)
         fig, ax = plt.subplots()
-        ax.plot(error, color='k')
+        ax.plot(error_history, color='k')
         ax.plot(x, mov_error, color='r')
         ax.set_xlabel('Number of trials')
         ax.set_ylabel('Error in [cm]')
