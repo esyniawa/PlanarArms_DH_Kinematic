@@ -12,9 +12,10 @@ BaselineNeuron = ann.Neuron(
     parameters="""
         baseline = 0.0
         noise = 0.0 : population
+        scale = 1.0 : population
     """,
     equations="""
-        r = baseline + noise * Uniform(-1.0,1.0): min=0.0
+        r = scale * baseline + noise * Uniform(-1.0,1.0): min=0.0
     """
 )
 
@@ -89,6 +90,7 @@ res_synapse = ann.Synapse(
 # Input population
 inp_theta = ann.Population(geometry=2, neuron=BaselineNeuron, name="input_theta")
 inp_gradient = ann.Population(geometry=2, neuron=BaselineNeuron, name="input_gradients")
+inp_gradient.scale = 4.0
 inp_arm = ann.Population(geometry=2, neuron=BaselineNeuron, name="input_arm")
 
 input_pops = (inp_theta, inp_gradient, inp_arm)
